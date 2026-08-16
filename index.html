@@ -1,0 +1,1609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema POS & Inventario (SQLite Local) - Motorepuestos</title>
+  <!-- Cargamos la librería oficial de SQLite para el navegador -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --danger: #ef4444;
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 20px; }
+
+    .view { display: none; max-width: 1150px; margin: 0 auto; }
+    .active { display: block; }
+
+    /* Login */
+    .login-card {
+      max-width: 400px;
+      margin: 80px auto;
+      background: var(--surface);
+      padding: 32px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      border: 1px solid var(--border);
+    }
+    .login-card h2 { margin-bottom: 24px; text-align: center; color: var(--primary); }
+
+    /* Controles generales */
+    .form-group { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 4px; font-weight: 500; font-size: 0.85rem; }
+    input, select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--primary); }
+
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button:hover { background: var(--primary-dark); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-danger { background: var(--danger); }
+    .btn-danger:hover:not(:disabled) { background: #dc2626; }
+    .btn-success { background: var(--success); }
+    .btn-success:hover:not(:disabled) { background: #059669; }
+    .btn-warning { background: var(--warning); color: white; }
+    .btn-warning:hover:not(:disabled) { background: #d97706; }
+    .btn-rate { background: #0284c7; }
+    .btn-rate:hover:not(:disabled) { background: #0369a1; }
+
+    /* Header y Navegación */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface);
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .rate-box {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: #e2e8f0;
+      color: var(--text);
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tab-btn.active-tab {
+      background: var(--primary);
+      color: white;
+    }
+
+    .card {
+      background: var(--surface);
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    /* Grid Dashboard */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .dash-card {
+      background: var(--surface);
+      padding: 20px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .dash-card h4 {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .dash-card .value-primary {
+      font-size: 1.6rem;
+      font-weight: bold;
+      color: var(--text);
+    }
+
+    .dash-card .value-sub {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--success);
+      margin-top: 4px;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1.2fr 2fr; gap: 20px; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row .form-group { flex: 1; }
+
+    @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+    th { background: #f1f5f9; color: var(--text-muted); }
+
+    .badge {
+      background: #dbeafe;
+      color: var(--primary-dark);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .alert { padding: 10px; margin-bottom: 12px; border-radius: 6px; display: none; font-size: 0.85rem; }
+    .alert-error { background: #fee2e2; color: #991b1b; }
+    
+    .price-ves { color: #059669; font-weight: 600; font-size: 0.82rem; display: block; }
+
+    .total-box {
+      background: #f8fafc;
+      border: 2px dashed var(--primary);
+      padding: 12px;
+      border-radius: 8px;
+      text-align: right;
+      margin-top: 15px;
+    }
+
+    .tag-low-stock {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    .action-btns { display: flex; gap: 4px; }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(2px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-card {
+      background: var(--surface);
+      width: 90%; max-width: 450px;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+    }
+
+    /* Estilo especial para Modal Ancho de Inventario */
+    .modal-card-lg {
+      max-width: 850px;
+      width: 95%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px;
+    }
+
+    .modal-summary {
+      background: #f1f5f9; padding: 12px; border-radius: 8px; margin-bottom: 16px; text-align: center;
+    }
+
+    /* ESTILOS DE IMPRESIÓN */
+    #receipt-print-area { display: none; }
+
+    @media print {
+      body * { visibility: hidden; }
+      #receipt-print-area, #receipt-print-area * { visibility: visible; }
+      #receipt-print-area {
+        display: block !important;
+        position: absolute; left: 0; top: 0;
+        width: 80mm; padding: 10px;
+        font-family: monospace; font-size: 12px; color: #000;
+      }
+      #receipt-print-area h2, #receipt-print-area p, #receipt-print-area table { margin-bottom: 8px; }
+      #receipt-print-area table { width: 100%; border-collapse: collapse; }
+      #receipt-print-area th, #receipt-print-area td { padding: 4px 0; font-size: 11px; }
+      .receipt-line { border-bottom: 1px dashed #000; margin: 8px 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- AREA DE IMPRESIÓN OCULTA PARA TICKETS -->
+  <div id="receipt-print-area"></div>
+
+  <!-- 1. VISTA LOGIN -->
+  <div id="view-login" class="view active">
+    <div class="login-card">
+      <h2>Inicia Sesión (SQL)</h2>
+      <div id="login-alert" class="alert alert-error">Usuario o contraseña incorrectos.</div>
+      <form id="form-login">
+        <div class="form-group">
+          <label>Usuario</label>
+          <input type="text" id="username" placeholder="admin o cajero" required>
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="password" required>
+        </div>
+        <button type="submit" style="width: 100%;">Ingresar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. VISTA PRINCIPAL APP -->
+  <div id="view-app" class="view">
+    <div class="header">
+      <div>
+        <h2>Sistema POS & Inventario SQL</h2>
+      </div>
+      <div class="rate-box">
+        <span>Tasa: <b id="rate-display">0.00</b> Bs/$</span>
+        <button class="btn-rate" onclick="updateExchangeRate()">🇻🇪 Cambiar Tasa</button>
+      </div>
+      <div>
+        <span><b id="user-display"></b> (<span id="role-badge" class="badge"></span>)</span>
+        <button id="btn-logout" class="btn-danger" style="margin-left: 10px;">Salir</button>
+      </div>
+    </div>
+
+    <!-- Pestañas -->
+    <div class="nav-tabs">
+      <button class="tab-btn active-tab" onclick="switchTab('tab-dashboard', event)">📊 Inicio</button>
+      <button class="tab-btn" onclick="switchTab('tab-ventas', event)">🛒 Nueva Venta</button>
+      <button class="tab-btn" onclick="switchTab('tab-inventario', event)">📦 Inventario</button>
+      <button class="tab-btn" onclick="switchTab('tab-clientes', event)">👥 Clientes</button>
+      <button class="tab-btn admin-only" onclick="switchTab('tab-proveedores', event)">🚚 Proveedores</button>
+      <button class="tab-btn" onclick="switchTab('tab-historial', event)">📜 Historial Ventas</button>
+      <button class="tab-btn admin-only" onclick="switchTab('tab-cierre', event)">📊 Cierre de Caja</button>
+    </div>
+
+    <!-- INICIO -->
+    <div id="tab-dashboard" class="tab-content">
+      <div class="dashboard-grid">
+        <div class="dash-card" style="border-left: 4px solid var(--primary);">
+          <h4>Ventas de Hoy</h4>
+          <div class="value-primary">$<span id="dash-today-usd">0.00</span></div>
+          <div class="value-sub">Bs. <span id="dash-today-ves">0.00</span></div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;"><span id="dash-today-count">0</span> transacciones hoy</p>
+        </div>
+
+        <div class="dash-card" style="border-left: 4px solid var(--danger);">
+          <h4>Stock Crítico (&lt; 3 unid.)</h4>
+          <div class="value-primary" style="color: var(--danger);"><span id="dash-low-stock-count">0</span> Productos</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">Requieren reposición urgente</p>
+        </div>
+
+        <div class="dash-card" style="border-left: 4px solid var(--success);">
+          <h4>Total de Productos</h4>
+          <div class="value-primary"><span id="dash-total-products">0</span> Ítems</div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;">Registrados en sistema SQL</p>
+        </div>
+
+        <div class="dash-card" style="border-left: 4px solid var(--warning); justify-content: center; align-items: center; text-align: center;">
+          <h4 style="margin-bottom: 12px;">Acción Rápida</h4>
+          <button class="btn-success" onclick="goToSalesTab()" style="width: 100%; padding: 10px;">+ Registrar Nueva Venta</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="color: var(--danger); font-size: 1.1rem; margin-bottom: 10px;">⚠️ Productos con Alerta de Stock Mínimo (&lt; 3)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Producto</th>
+              <th>Proveedor</th>
+              <th>Precio Venta ($)</th>
+              <th>Stock Actual</th>
+            </tr>
+          </thead>
+          <tbody id="dash-low-stock-list"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- NUEVA VENTA -->
+    <div id="tab-ventas" class="tab-content" style="display:none;">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Registrar Venta</h3>
+          <div class="form-group" style="margin-top: 10px;">
+            <label>Seleccionar Cliente</label>
+            <select id="sale-client"></select>
+          </div>
+
+          <hr style="margin: 15px 0;">
+          <h4>Buscar Producto</h4>
+          
+          <div class="form-group" style="margin-top: 8px;">
+            <label>Buscar por Código o Descripción</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="search-sale-prod" placeholder="Escribe el código o nombre..." oninput="filterSaleProducts()" style="flex: 1;">
+              <button type="button" class="btn-rate" onclick="openSaleInventoryModal()" style="white-space: nowrap;">🔍 Ver Inventario</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Producto Encontrado</label>
+            <select id="sale-product" size="5" style="height: 110px;"></select>
+          </div>
+
+          <div class="form-group">
+            <label>Cantidad</label>
+            <input type="number" id="sale-qty" value="1" min="1">
+          </div>
+          <button type="button" onclick="addToCart()" style="width: 100%;">+ Agregar al Carrito</button>
+        </div>
+
+        <div class="card">
+          <h3>Carrito de Compras</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cant.</th>
+                <th>Precio ($ / Bs)</th>
+                <th>Subtotal</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="cart-list"></tbody>
+          </table>
+
+          <div class="total-box">
+            <p style="font-size: 0.9rem; color: var(--text-muted);">Monto Total a Pagar:</p>
+            <h2 class="price-usd">$<span id="cart-total-usd">0.00</span></h2>
+            <span class="price-ves" style="font-size: 1.2rem;">Bs. <span id="cart-total-ves">0.00</span></span>
+            <button class="btn-success" onclick="processSale()" style="margin-top: 12px; width: 100%; font-size: 1.05rem; padding: 12px;">Completar Venta</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVENTARIO -->
+    <div id="tab-inventario" class="tab-content" style="display:none;">
+      <div class="grid-2">
+        <div class="card admin-only" id="card-prod-form">
+          <h3 id="form-title">Agregar Producto</h3>
+          <form id="form-product">
+            <input type="hidden" id="prod-id">
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>Código</label>
+                <input type="text" id="prod-code" placeholder="Ej: P-01" required>
+              </div>
+              <div class="form-group">
+                <label>Proveedor</label>
+                <select id="prod-supplier" required></select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Nombre del Producto / Descripción</label>
+              <input type="text" id="prod-name" placeholder="Ej: Aceite 2T 1L" required>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Precio Costo ($)</label>
+                <input type="number" step="0.01" id="prod-cost" placeholder="0.00" oninput="calculateSalePrice()" required>
+              </div>
+              <div class="form-group">
+                <label>% Ganancia</label>
+                <input type="number" step="0.1" id="prod-margin" placeholder="30" value="30" oninput="calculateSalePrice()" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Precio Venta ($)</label>
+                <input type="number" step="0.01" id="prod-price" placeholder="0.00" oninput="calculateMarginFromPrice()" required>
+              </div>
+              <div class="form-group">
+                <label>Stock</label>
+                <input type="number" id="prod-stock" placeholder="0" required>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+              <button type="submit" id="btn-save-prod" class="btn-success" style="flex: 1; margin-top: 8px;">Guardar Producto</button>
+              <button type="button" id="btn-cancel-edit" onclick="resetProdForm()" class="btn-danger" style="display: none; margin-top: 8px;">Cancelar</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+            <h3>Productos Registrados</h3>
+            <button class="btn-danger" onclick="exportZeroStockCSV()" style="font-size: 0.85rem; padding: 6px 12px;">
+              🚨 Exportar Agotados (CSV)
+            </button>
+          </div>
+
+          <!-- Buscador en Inventario -->
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label>Buscar por Código o Producto:</label>
+            <input type="text" id="search-inv-prod" placeholder="Escribe para filtrar el inventario..." oninput="renderInventory()">
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Proveedor</th>
+                <th>Costo ($)</th>
+                <th>% Gan.</th>
+                <th>P. Venta ($/Bs)</th>
+                <th>Stock</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-list"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLIENTES -->
+    <div id="tab-clientes" class="tab-content" style="display:none;">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Registrar Cliente</h3>
+          <form id="form-client">
+            <div class="form-group"><label>Cédula / RIF</label><input type="text" id="cli-doc" required></div>
+            <div class="form-group"><label>Nombre y Apellido / Razón Social</label><input type="text" id="cli-name" required></div>
+            <div class="form-group"><label>Teléfono</label><input type="text" id="cli-phone" required></div>
+            <button type="submit" class="btn-success" style="width: 100%;">Guardar Cliente</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>Directorio de Clientes</h3>
+          <table>
+            <thead><tr><th>Cédula/RIF</th><th>Nombre</th><th>Teléfono</th></tr></thead>
+            <tbody id="clients-list"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROVEEDORES -->
+    <div id="tab-proveedores" class="tab-content admin-only" style="display:none;">
+      <div class="grid-2">
+        <div class="card">
+          <h3>Registrar Proveedor</h3>
+          <form id="form-supplier">
+            <div class="form-group"><label>RIF / Cédula</label><input type="text" id="sup-doc" required></div>
+            <div class="form-group"><label>Empresa / Contacto</label><input type="text" id="sup-name" required></div>
+            <div class="form-group"><label>Teléfono</label><input type="text" id="sup-phone" required></div>
+            <button type="submit" class="btn-success" style="width: 100%;">Guardar Proveedor</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>Lista de Proveedores</h3>
+          <table>
+            <thead><tr><th>RIF</th><th>Empresa</th><th>Teléfono</th></tr></thead>
+            <tbody id="suppliers-list"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <div id="tab-historial" class="tab-content" style="display:none;">
+      <div class="card">
+        <h3>Historial de Ventas</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>N° Venta</th>
+              <th>Fecha y Hora</th>
+              <th>Cliente</th>
+              <th>Método Pago</th>
+              <th>Total USD</th>
+              <th>Total Bs.</th>
+              <th>Tasa</th>
+              <th>Vendedor</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="history-list"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CIERRE DE CAJA -->
+    <div id="tab-cierre" class="tab-content admin-only" style="display:none;">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+          <div>
+            <h3>Resumen y Cierre de Caja</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Consolidado total de ingresos acumulados en ambas monedas.</p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-success" onclick="exportCierreCSV()" style="padding: 10px 16px; font-size: 0.95rem;">
+              📥 Exportar Cierre (CSV)
+            </button>
+            <button class="btn-rate" onclick="downloadDatabaseSQL()" style="padding: 10px 16px; font-size: 0.95rem;">
+              💾 Guardar Copia Base de Datos SQL (.sqlite)
+            </button>
+            <!-- BOTÓN RESTAURAR Y INPUT DE ARCHIVO OCULTO -->
+            <button class="btn-warning" onclick="document.getElementById('input-restore-db').click()" style="padding: 10px 16px; font-size: 0.95rem;">
+              📂 Restaurar / Cargar Respaldo SQL
+            </button>
+            <input type="file" id="input-restore-db" accept=".sqlite,.db" style="display: none;" onchange="restoreDatabaseSQL(event)">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+          <div style="background: #e0f2fe; padding: 15px; border-radius: 8px; flex: 1; min-width: 200px;">
+            <h4>Total Operaciones</h4>
+            <h2 id="summary-count">0</h2>
+          </div>
+          <div style="background: #dcfce7; padding: 15px; border-radius: 8px; flex: 1; min-width: 200px;">
+            <h4>Ingreso Total ($ USD)</h4>
+            <h2 style="color: #166534;">$<span id="summary-total-usd">0.00</span></h2>
+          </div>
+          <div style="background: #fef9c3; padding: 15px; border-radius: 8px; flex: 1; min-width: 200px;">
+            <h4>Ingreso Total (Bs. VES)</h4>
+            <h2 style="color: #854d0e;">Bs. <span id="summary-total-ves">0.00</span></h2>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL BÚSQUEDA DE INVENTARIO EN VENTA -->
+  <div id="modal-sale-inventory" class="modal-overlay">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <h3>📦 Buscar Producto en Inventario</h3>
+        <button onclick="closeSaleInventoryModal()" style="background: transparent; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 12px;">
+        <input type="text" id="modal-search-inv" placeholder="🔍 Filtrar por código o nombre del producto..." oninput="renderModalInventory()">
+      </div>
+
+      <div style="overflow-y: auto; flex: 1; border: 1px solid var(--border); border-radius: 6px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Producto</th>
+              <th>Precio ($)</th>
+              <th>Precio (Bs.)</th>
+              <th>Stock</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="modal-inventory-list"></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 15px; text-align: right;">
+        <button class="btn-danger" onclick="closeSaleInventoryModal()">Cerrar Ventana</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE PAGO -->
+  <div id="modal-payment" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>💳 Seleccionar Método de Pago</h3>
+        <button onclick="closePaymentModal()" style="background: transparent; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
+      </div>
+
+      <div class="modal-summary">
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Total Cobrado:</p>
+        <h2 style="color: var(--primary);">$<span id="modal-total-usd">0.00</span></h2>
+        <span class="price-ves" style="font-size: 1.1rem;">Bs. <span id="modal-total-ves">0.00</span></span>
+      </div>
+
+      <div class="form-group">
+        <label>Forma de Pago</label>
+        <select id="pay-method" onchange="toggleRefInput()">
+          <option value="Efectivo USD">💵 Efectivo ($ USD)</option>
+          <option value="Efectivo BS">🇻🇪 Efectivo (Bs. VES)</option>
+          <option value="Pago Móvil">📱 Pago Móvil</option>
+          <option value="Punto de Venta">💳 Punto de Venta</option>
+          <option value="Transferencia">🏦 Transferencia Bancaria</option>
+          <option value="Binance">🟡 Binance Pay</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="group-ref" style="display: none;">
+        <label id="label-ref">N° de Referencia / Comprobante</label>
+        <input type="text" id="pay-ref" placeholder="Ej: 123456">
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button class="btn-danger" onclick="closePaymentModal()" style="flex: 1;">Cancelar</button>
+        <button class="btn-success" onclick="confirmSale()" style="flex: 1.5;">Confirmar y Registrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CAMBIO DE TASA -->
+  <div id="modal-rate" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🇻🇪 Actualizar Tasa de Cambio</h3>
+        <button onclick="closeRateModal()" style="background: transparent; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">✕</button>
+      </div>
+      <div class="form-group" style="margin-top: 15px;">
+        <label>Nueva Tasa del Día (Bs/$)</label>
+        <input type="number" step="0.01" id="input-new-rate" placeholder="0.00" required>
+      </div>
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button class="btn-danger" onclick="closeRateModal()" style="flex: 1;">Cancelar</button>
+        <button class="btn-success" onclick="saveExchangeRate()" style="flex: 1.5;">Guardar Tasa</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- USUARIOS DEL SISTEMA ---
+    const USERS = {
+      admin: { pass: 'admin123', role: 'admin' },
+      cajero: { pass: '1234', role: 'cajero' }
+    };
+
+    let SQL_ENGINE = null;
+    let db = null;
+    let currentUser = null;
+    let exchangeRate = 36.50;
+    let cart = [];
+
+    // --- INICIALIZACIÓN BASE DE DATOS SQLITE ---
+async function initSqlDB() {
+  try {
+    // Es obligatorio usar await aquí para esperar a que sql.js cargue el motor Wasm
+    SQL_ENGINE = await initSqlJs({
+      locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+    });
+
+    const savedDb = localStorage.getItem('app_sqlite_db');
+    if (savedDb) {
+      const u8 = new Uint8Array(JSON.parse(savedDb));
+      db = new SQL_ENGINE.Database(u8);
+    } else {
+      db = new SQL_ENGINE.Database();
+      createTablesSQL();
+    }
+
+    loadExchangeRateFromSQL();
+    loadAllData(); // Asegura la carga de datos tras la inicialización
+    console.log("SQLite listo para operar.");
+  } catch (err) {
+    console.error("Error inicializando SQLite:", err);
+  }
+}
+
+    function createTablesSQL() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS config (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE,
+      password TEXT,
+      role TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS proveedores (
+      id TEXT PRIMARY KEY,
+      doc TEXT,
+      name TEXT,
+      phone TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS clientes (
+      id TEXT PRIMARY KEY,
+      doc TEXT,
+      name TEXT,
+      phone TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS productos (
+      id TEXT PRIMARY KEY,
+      code TEXT UNIQUE,
+      name TEXT,
+      supplier TEXT,
+      cost REAL,
+      margin REAL,
+      price REAL,
+      stock INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS ventas (
+      id TEXT PRIMARY KEY,
+      date TEXT,
+      isoDate TEXT,
+      client TEXT,
+      paymentMethod TEXT,
+      paymentRef TEXT,
+      totalUsd REAL,
+      totalVes REAL,
+      rateUsed REAL,
+      seller TEXT,
+      itemsJson TEXT
+    );
+  `);
+
+  // Datos por defecto si es primera vez
+  db.run(`INSERT OR IGNORE INTO config VALUES ('rate', '36.50');`);
+  
+  // USUARIOS POR DEFECTO PARA PODER INICIAR SESIÓN
+  db.run(`INSERT OR IGNORE INTO usuarios VALUES ('1', 'admin', 'admin123', 'admin');`);
+  db.run(`INSERT OR IGNORE INTO usuarios VALUES ('2', 'cajero', '1234', 'cajero');`);
+
+  db.run(`INSERT OR IGNORE INTO proveedores VALUES ('1', 'J-12345678', 'Distribuidora General', '0412-0000000');`);
+  db.run(`INSERT OR IGNORE INTO clientes VALUES ('1', 'V-00000000', 'Cliente General', 'N/A');`);
+  db.run(`INSERT OR IGNORE INTO productos VALUES ('1', 'PROD-01', 'Aceite 2T 1L', 'Distribuidora General', 4.00, 30, 5.20, 2);`);
+  db.run(`INSERT OR IGNORE INTO productos VALUES ('2', 'PROD-02', 'Bujía Standard', 'Distribuidora General', 1.00, 50, 1.50, 50);`);
+  
+  saveDBToLocalStorage();
+}
+
+    // --- RESTAURAR BASE DE DATOS (.sqlite / .db) ---
+    function restoreDatabaseSQL(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (!confirm("⚠️ ¡ATENCIÓN!\n\nAl cargar este respaldo se reemplazará toda la base de datos actual (inventario, ventas, clientes, proveedores).\n\n¿Estás seguro de que deseas continuar?")) {
+        event.target.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const u8 = new Uint8Array(e.target.result);
+          const newDb = new SQL_ENGINE.Database(u8);
+
+          // Verificación básica de estructura SQL
+          newDb.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='productos'");
+
+          // Si la consulta fue exitosa, cerramos la actual y asignamos la nueva
+          if (db) db.close();
+          db = newDb;
+
+          saveDBToLocalStorage();
+          loadExchangeRateFromSQL();
+          updateRateUI();
+          loadAllData();
+
+          alert("✅ Base de datos restaurada con éxito.");
+        } catch (err) {
+          console.error(err);
+          alert("❌ Error al procesar el archivo. Asegúrate de seleccionar un archivo .sqlite o .db válido.");
+        } finally {
+          event.target.value = '';
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function loadExchangeRateFromSQL() {
+      const res = db.exec("SELECT value FROM config WHERE key = 'rate'");
+      if (res.length > 0 && res[0].values.length > 0) {
+        exchangeRate = parseFloat(res[0].values[0][0]) || 36.50;
+      }
+    }
+
+    // --- AUTENTICACIÓN ---
+    document.getElementById('form-login').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const u = document.getElementById('username').value.trim();
+      const p = document.getElementById('password').value.trim();
+
+      if (USERS[u] && USERS[u].pass === p) {
+        currentUser = { username: u, role: USERS[u].role };
+        document.getElementById('login-alert').style.display = 'none';
+        document.getElementById('form-login').reset();
+        initDashboard();
+      } else {
+        document.getElementById('login-alert').style.display = 'block';
+      }
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', () => {
+      currentUser = null;
+      document.getElementById('view-app').classList.remove('active');
+      document.getElementById('view-login').classList.add('active');
+    });
+
+    function initDashboard() {
+      document.getElementById('view-login').classList.remove('active');
+      document.getElementById('view-app').classList.add('active');
+      document.getElementById('user-display').textContent = currentUser.username;
+      document.getElementById('role-badge').textContent = currentUser.role;
+
+      const adminElems = document.querySelectorAll('.admin-only');
+      adminElems.forEach(el => el.style.display = currentUser.role === 'admin' ? '' : 'none');
+
+      updateRateUI();
+      switchTab('tab-dashboard');
+      loadAllData();
+    }
+
+    // --- TASA DE CAMBIO ---
+    function updateExchangeRate() {
+      document.getElementById('input-new-rate').value = exchangeRate;
+      document.getElementById('modal-rate').style.display = 'flex';
+      document.getElementById('input-new-rate').focus();
+    }
+
+    function closeRateModal() {
+      document.getElementById('modal-rate').style.display = 'none';
+    }
+
+    function saveExchangeRate() {
+      const newRate = parseFloat(document.getElementById('input-new-rate').value);
+      if (!isNaN(newRate) && newRate > 0) {
+        exchangeRate = newRate;
+        db.run("UPDATE config SET value = ? WHERE key = 'rate'", [exchangeRate.toString()]);
+        saveDBToLocalStorage();
+        updateRateUI();
+        loadAllData();
+        renderCart();
+        closeRateModal();
+      } else {
+        alert('Ingresa un valor válido para la tasa.');
+      }
+    }
+
+    document.getElementById('input-new-rate').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveExchangeRate();
+      }
+    });
+
+    function updateRateUI() {
+      document.getElementById('rate-display').textContent = exchangeRate.toFixed(2);
+    }
+
+    // --- NAVEGACIÓN ---
+    function switchTab(tabId, ev) {
+      document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active-tab'));
+      
+      document.getElementById(tabId).style.display = 'block';
+      
+      if (ev) {
+        ev.target.classList.add('active-tab');
+      } else {
+        const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick')?.includes(tabId));
+        if (btn) btn.classList.add('active-tab');
+      }
+
+      if (tabId === 'tab-dashboard') renderDashboardMetrics();
+      if (tabId === 'tab-cierre') renderCierre();
+    }
+
+    function goToSalesTab() { switchTab('tab-ventas'); }
+
+    // --- CONSULTAS SQL / CARGA DE DATOS ---
+    function getProductsSQL() {
+      const res = db.exec("SELECT id, code, name, supplier, cost, margin, price, stock FROM productos");
+      if (res.length === 0) return [];
+      return res[0].values.map(r => ({
+        id: r[0], code: r[1], name: r[2], supplier: r[3],
+        cost: r[4], margin: r[5], price: r[6], stock: r[7]
+      }));
+    }
+
+    function getClientsSQL() {
+      const res = db.exec("SELECT id, doc, name, phone FROM clientes");
+      if (res.length === 0) return [];
+      return res[0].values.map(r => ({ id: r[0], doc: r[1], name: r[2], phone: r[3] }));
+    }
+
+    function getSuppliersSQL() {
+      const res = db.exec("SELECT id, doc, name, phone FROM proveedores");
+      if (res.length === 0) return [];
+      return res[0].values.map(r => ({ id: r[0], doc: r[1], name: r[2], phone: r[3] }));
+    }
+
+    function getSalesSQL() {
+      const res = db.exec("SELECT id, date, isoDate, client, paymentMethod, paymentRef, totalUsd, totalVes, rateUsed, seller, itemsJson FROM ventas");
+      if (res.length === 0) return [];
+      return res[0].values.map(r => ({
+        id: r[0], date: r[1], isoDate: r[2], client: r[3],
+        paymentMethod: r[4], paymentRef: r[5], totalUsd: r[6],
+        totalVes: r[7], rateUsed: r[8], seller: r[9],
+        items: JSON.parse(r[10] || '[]')
+      }));
+    }
+
+    function loadAllData() {
+      populateSelects();
+      renderInventory();
+      renderClients();
+      renderSuppliers();
+      renderSalesHistory();
+      renderDashboardMetrics();
+      filterSaleProducts();
+    }
+
+    // --- METRICAS Y DASHBOARD ---
+    function renderDashboardMetrics() {
+      const todayISO = new Date().toISOString().split('T')[0];
+      const sales = getSalesSQL();
+      const inventory = getProductsSQL();
+      
+      const todaySales = sales.filter(s => s.isoDate === todayISO);
+      const todayUsd = todaySales.reduce((acc, s) => acc + s.totalUsd, 0);
+      const todayVes = todaySales.reduce((acc, s) => acc + s.totalVes, 0);
+
+      document.getElementById('dash-today-usd').textContent = todayUsd.toFixed(2);
+      document.getElementById('dash-today-ves').textContent = todayVes.toFixed(2);
+      document.getElementById('dash-today-count').textContent = todaySales.length;
+
+      // ACTUALIZADO: Filtro para stock menor a 3
+      const lowStockItems = inventory.filter(p => p.stock < 3);
+      document.getElementById('dash-low-stock-count').textContent = lowStockItems.length;
+      document.getElementById('dash-total-products').textContent = inventory.length;
+
+      const lowList = document.getElementById('dash-low-stock-list');
+      if (lowStockItems.length === 0) {
+        lowList.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--success); font-weight: bold;">¡Excelente! No hay productos con stock menor a 3.</td></tr>`;
+      } else {
+        lowList.innerHTML = lowStockItems.map(p => `
+          <tr>
+            <td><b>${p.code}</b></td>
+            <td>${p.name}</td>
+            <td><small>${p.supplier || 'N/A'}</small></td>
+            <td>$${p.price.toFixed(2)}</td>
+            <td><span class="tag-low-stock">${p.stock} unid.</span></td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    // --- CALCULADORA ---
+    function calculateSalePrice() {
+      const cost = parseFloat(document.getElementById('prod-cost').value) || 0;
+      const margin = parseFloat(document.getElementById('prod-margin').value) || 0;
+      const price = cost + (cost * (margin / 100));
+      document.getElementById('prod-price').value = price.toFixed(2);
+    }
+
+    function calculateMarginFromPrice() {
+      const cost = parseFloat(document.getElementById('prod-cost').value) || 0;
+      const price = parseFloat(document.getElementById('prod-price').value) || 0;
+      if (cost > 0) {
+        const margin = ((price - cost) / cost) * 100;
+        document.getElementById('prod-margin').value = margin.toFixed(1);
+      }
+    }
+
+    // --- PROCESO VENTAS ---
+    function populateSelects() {
+      const clients = getClientsSQL();
+      const suppliers = getSuppliersSQL();
+
+      document.getElementById('sale-client').innerHTML = clients.map(c => `<option value="${c.id}">${c.name} (${c.doc})</option>`).join('');
+
+      const supSelect = document.getElementById('prod-supplier');
+      if (suppliers.length === 0) {
+        supSelect.innerHTML = `<option value="Sin Proveedor">Sin Proveedor</option>`;
+      } else {
+        supSelect.innerHTML = suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+      }
+    }
+
+    function filterSaleProducts() {
+      const query = document.getElementById('search-sale-prod').value.toLowerCase().trim();
+      const prodSelect = document.getElementById('sale-product');
+      const inventory = getProductsSQL();
+      
+      const filtered = inventory.filter(p => 
+        p.code.toLowerCase().includes(query) || 
+        p.name.toLowerCase().includes(query)
+      );
+
+      prodSelect.innerHTML = filtered.map(p => {
+        const priceBs = (p.price * exchangeRate).toFixed(2);
+        return `<option value="${p.id}">[${p.code}] ${p.name} - $${p.price.toFixed(2)} / Bs. ${priceBs} (Stock: ${p.stock})</option>`;
+      }).join('');
+
+      if(filtered.length > 0) prodSelect.selectedIndex = 0;
+    }
+
+    // --- MODAL BÚSQUEDA DE INVENTARIO ---
+    function openSaleInventoryModal() {
+      document.getElementById('modal-search-inv').value = '';
+      renderModalInventory();
+      document.getElementById('modal-sale-inventory').style.display = 'flex';
+      document.getElementById('modal-search-inv').focus();
+    }
+
+    function closeSaleInventoryModal() {
+      document.getElementById('modal-sale-inventory').style.display = 'none';
+    }
+
+    function renderModalInventory() {
+      const query = document.getElementById('modal-search-inv').value.toLowerCase().trim();
+      const inventory = getProductsSQL();
+
+      const filtered = inventory.filter(p =>
+        p.code.toLowerCase().includes(query) ||
+        p.name.toLowerCase().includes(query)
+      );
+
+      const listElem = document.getElementById('modal-inventory-list');
+      if (filtered.length === 0) {
+        listElem.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No se encontraron productos.</td></tr>`;
+        return;
+      }
+
+      listElem.innerHTML = filtered.map(p => {
+        const priceBs = (p.price * exchangeRate).toFixed(2);
+        const disabledAttr = p.stock <= 0 ? 'disabled' : '';
+        const btnText = p.stock <= 0 ? 'Agotado' : 'Seleccionar';
+        const btnClass = p.stock <= 0 ? 'btn-danger' : 'btn-success';
+
+        return `
+          <tr>
+            <td><b>${p.code}</b></td>
+            <td>${p.name}</td>
+            <td>$${p.price.toFixed(2)}</td>
+            <td><span class="price-ves">Bs. ${priceBs}</span></td>
+            <td><b style="color: ${p.stock < 3 ? 'red' : 'inherit'}">${p.stock}</b></td>
+            <td>
+              <button class="${btnClass}" onclick="selectProductFromModal('${p.id}')" ${disabledAttr} style="padding: 4px 8px; font-size: 0.8rem;">
+                ${btnText}
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function selectProductFromModal(productId) {
+      const inventory = getProductsSQL();
+      const prod = inventory.find(p => p.id === productId);
+
+      if (prod) {
+        document.getElementById('search-sale-prod').value = prod.code;
+        filterSaleProducts();
+        document.getElementById('sale-product').value = prod.id;
+        closeSaleInventoryModal();
+      }
+    }
+
+    function addToCart() {
+      const prodId = document.getElementById('sale-product').value;
+      const qty = parseInt(document.getElementById('sale-qty').value);
+      const inventory = getProductsSQL();
+      const prod = inventory.find(p => p.id === prodId);
+
+      if (!prod) { alert('Selecciona un producto válido.'); return; }
+      if (qty > prod.stock) { alert('¡Stock insuficiente!'); return; }
+
+      const existing = cart.find(item => item.id === prodId);
+      if (existing) {
+        if (existing.qty + qty > prod.stock) { alert('¡Excede stock!'); return; }
+        existing.qty += qty;
+        existing.subtotalUsd = existing.qty * existing.priceUsd;
+      } else {
+        cart.push({
+          id: prod.id, code: prod.code, name: prod.name,
+          priceUsd: prod.price, qty: qty, subtotalUsd: prod.price * qty
+        });
+      }
+      renderCart();
+    }
+
+    function renderCart() {
+      const list = document.getElementById('cart-list');
+      list.innerHTML = '';
+      let totalUsd = 0;
+
+      cart.forEach((item, index) => {
+        totalUsd += item.subtotalUsd;
+        const priceVes = (item.priceUsd * exchangeRate).toFixed(2);
+        const subtotalVes = (item.subtotalUsd * exchangeRate).toFixed(2);
+
+        list.innerHTML += `
+          <tr>
+            <td><b>${item.code}</b> - ${item.name}</td>
+            <td>${item.qty}</td>
+            <td>$${item.priceUsd.toFixed(2)} <span class="price-ves">Bs. ${priceVes}</span></td>
+            <td>$${item.subtotalUsd.toFixed(2)} <span class="price-ves">Bs. ${subtotalVes}</span></td>
+            <td><button class="btn-danger" onclick="removeFromCart(${index})">X</button></td>
+          </tr>
+        `;
+      });
+
+      const totalVes = totalUsd * exchangeRate;
+      document.getElementById('cart-total-usd').textContent = totalUsd.toFixed(2);
+      document.getElementById('cart-total-ves').textContent = totalVes.toFixed(2);
+    }
+
+    function removeFromCart(index) {
+      cart.splice(index, 1);
+      renderCart();
+    }
+
+    function processSale() {
+      if (cart.length === 0) { alert('El carrito está vacío'); return; }
+      const totalUsd = cart.reduce((sum, item) => sum + item.subtotalUsd, 0);
+      const totalVes = totalUsd * exchangeRate;
+
+      document.getElementById('modal-total-usd').textContent = totalUsd.toFixed(2);
+      document.getElementById('modal-total-ves').textContent = totalVes.toFixed(2);
+      document.getElementById('pay-ref').value = '';
+      document.getElementById('pay-method').value = 'Efectivo USD';
+      toggleRefInput();
+
+      document.getElementById('modal-payment').style.display = 'flex';
+    }
+
+    function closePaymentModal() { document.getElementById('modal-payment').style.display = 'none'; }
+
+    function toggleRefInput() {
+      const method = document.getElementById('pay-method').value;
+      const groupRef = document.getElementById('group-ref');
+      const requiresRef = ['Pago Móvil', 'Punto de Venta', 'Transferencia', 'Binance'].includes(method);
+
+      if (requiresRef) {
+        groupRef.style.display = 'block';
+        document.getElementById('label-ref').textContent = `N° de Referencia / Comprobante (${method})`;
+      } else {
+        groupRef.style.display = 'none';
+      }
+    }
+
+    function confirmSale() {
+      const clientId = document.getElementById('sale-client').value;
+      const clients = getClientsSQL();
+      const client = clients.find(c => c.id === clientId);
+      const totalUsd = cart.reduce((sum, item) => sum + item.subtotalUsd, 0);
+      const totalVes = totalUsd * exchangeRate;
+      
+      const method = document.getElementById('pay-method').value;
+      const ref = document.getElementById('pay-ref').value.trim();
+
+      const requiresRef = ['Pago Móvil', 'Punto de Venta', 'Transferencia', 'Binance'].includes(method);
+      if (requiresRef && !ref) { alert('Ingresa el número de referencia.'); return; }
+
+      // Actualizar Stock en SQL
+      cart.forEach(cartItem => {
+        db.run("UPDATE productos SET stock = stock - ? WHERE id = ?", [cartItem.qty, cartItem.id]);
+      });
+
+      const now = new Date();
+      const saleId = 'V-' + Date.now().toString().slice(-4);
+      const isoDate = now.toISOString().split('T')[0];
+      const dateStr = now.toLocaleString();
+      const clientName = client ? client.name : 'General';
+      const itemsJson = JSON.stringify(cart);
+
+      // Insertar Venta en SQL
+      db.run(`
+        INSERT INTO ventas VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [saleId, dateStr, isoDate, clientName, method, ref || 'N/A', totalUsd, totalVes, exchangeRate, currentUser.username, itemsJson]);
+
+      saveDBToLocalStorage();
+
+      cart = [];
+      loadAllData();
+      renderCart();
+      closePaymentModal();
+
+      if (confirm(`¡Venta Procesada Exitosamente en SQL!\n\nMétodo: ${method}\nTotal: $${totalUsd.toFixed(2)} USD\n\n¿Deseas imprimir el comprobante?`)) {
+        printReceipt(saleId);
+      }
+    }
+
+    // --- IMPRESIÓN Y EXPORTACIÓN ---
+    function printReceipt(saleId) {
+      const sales = getSalesSQL();
+      const sale = sales.find(s => s.id === saleId);
+      if (!sale) return;
+
+      const printArea = document.getElementById('receipt-print-area');
+      const itemsHtml = sale.items.map(item => `
+        <tr>
+          <td>${item.qty}x ${item.name}</td>
+          <td style="text-align: right;">$${item.subtotalUsd.toFixed(2)}</td>
+        </tr>
+      `).join('');
+
+      printArea.innerHTML = `
+        <div style="text-align: center;">
+          <h2 style="margin: 0;">MOTOREPUESTOS</h2>
+          <p style="margin: 4px 0;">Comprobante de Venta (SQL)</p>
+          <div class="receipt-line"></div>
+        </div>
+        <p><b>N° Factura:</b> ${sale.id}</p>
+        <p><b>Fecha:</b> ${sale.date}</p>
+        <p><b>Cliente:</b> ${sale.client}</p>
+        <p><b>Vendedor:</b> ${sale.seller}</p>
+        <div class="receipt-line"></div>
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: left;">Cant / Desc</th>
+              <th style="text-align: right;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>${itemsHtml}</tbody>
+        </table>
+        <div class="receipt-line"></div>
+        <p style="text-align: right;"><b>Total USD:</b> $${sale.totalUsd.toFixed(2)}</p>
+        <p style="text-align: right;"><b>Tasa:</b> Bs. ${sale.rateUsed.toFixed(2)}</p>
+        <p style="text-align: right; font-size: 13px;"><b>Total Bs:</b> Bs. ${sale.totalVes.toFixed(2)}</p>
+        <div class="receipt-line"></div>
+        <p><b>Pago:</b> ${sale.paymentMethod}</p>
+        ${sale.paymentRef !== 'N/A' ? `<p><b>Ref:</b> ${sale.paymentRef}</p>` : ''}
+        <br>
+        <p style="text-align: center;">¡Gracias por su compra!</p>
+      `;
+
+      window.print();
+    }
+
+    function exportCierreCSV() {
+      const sales = getSalesSQL();
+      if (sales.length === 0) { alert('No hay ventas registradas.'); return; }
+
+      const totalUsd = sales.reduce((sum, s) => sum + s.totalUsd, 0);
+      const totalVes = sales.reduce((sum, s) => sum + s.totalVes, 0);
+
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+      csvContent += "RESUMEN DE CIERRE DE CAJA SQL\n";
+      csvContent += `Fecha Exportacion,${new Date().toLocaleString()}\n`;
+      csvContent += `Total Operaciones,${sales.length}\n`;
+      csvContent += `Total USD,$${totalUsd.toFixed(2)}\n`;
+      csvContent += `Total Bs,Bs. ${totalVes.toFixed(2)}\n\n`;
+
+      csvContent += "DETALLE DE VENTAS\n";
+      csvContent += "N° Venta,Fecha,Cliente,Metodo,Referencia,Total USD,Total Bs,Tasa,Vendedor\n";
+
+      sales.forEach(s => {
+        csvContent += `"${s.id}","${s.date}","${s.client}","${s.paymentMethod}","${s.paymentRef}","${s.totalUsd.toFixed(2)}","${s.totalVes.toFixed(2)}","${s.rateUsed.toFixed(2)}","${s.seller}"\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Cierre_SQL_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Exportar productos con stock = 0
+    function exportZeroStockCSV() {
+      const inventory = getProductsSQL();
+      const zeroItems = inventory.filter(p => p.stock === 0);
+
+      if (zeroItems.length === 0) {
+        alert('¡No hay productos con stock igual a 0!');
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+      csvContent += "REPORTE DE PRODUCTOS AGOTADOS (STOCK 0)\n";
+      csvContent += `Fecha Exportacion,${new Date().toLocaleString()}\n\n`;
+      csvContent += "Codigo,Producto,Proveedor,Costo USD,Precio Venta USD,Stock\n";
+
+      zeroItems.forEach(p => {
+        csvContent += `"${p.code}","${p.name}","${p.supplier || 'N/A'}","${(p.cost || 0).toFixed(2)}","${p.price.toFixed(2)}","${p.stock}"\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Agotados_Stock0_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // --- GESTIÓN INVENTARIO EN SQL ---
+    document.getElementById('form-product').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const editId = document.getElementById('prod-id').value;
+      const code = document.getElementById('prod-code').value.trim();
+      const name = document.getElementById('prod-name').value.trim();
+      const supplier = document.getElementById('prod-supplier').value;
+      const cost = parseFloat(document.getElementById('prod-cost').value);
+      const margin = parseFloat(document.getElementById('prod-margin').value);
+      const price = parseFloat(document.getElementById('prod-price').value);
+      const stock = parseInt(document.getElementById('prod-stock').value);
+
+      const inventory = getProductsSQL();
+      const duplicate = inventory.find(p => p.code.toLowerCase() === code.toLowerCase() && p.id !== editId);
+      if (duplicate) { alert(`El código "${code}" ya existe.`); return; }
+
+      if (editId) {
+        db.run(`
+          UPDATE productos SET code=?, name=?, supplier=?, cost=?, margin=?, price=?, stock=? WHERE id=?
+        `, [code, name, supplier, cost, margin, price, stock, editId]);
+      } else {
+        const newId = Date.now().toString();
+        db.run(`
+          INSERT INTO productos VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [newId, code, name, supplier, cost, margin, price, stock]);
+      }
+
+      saveDBToLocalStorage();
+      loadAllData();
+      resetProdForm();
+    });
+
+    function editProd(id) {
+      const inventory = getProductsSQL();
+      const prod = inventory.find(p => p.id === id);
+      if (!prod) return;
+
+      document.getElementById('prod-id').value = prod.id;
+      document.getElementById('prod-code').value = prod.code;
+      document.getElementById('prod-name').value = prod.name;
+      document.getElementById('prod-supplier').value = prod.supplier || 'Sin Proveedor';
+      document.getElementById('prod-cost').value = prod.cost || 0;
+      document.getElementById('prod-margin').value = prod.margin || 30;
+      document.getElementById('prod-price').value = prod.price || 0;
+      document.getElementById('prod-stock').value = prod.stock || 0;
+
+      document.getElementById('form-title').textContent = 'Editar Producto';
+      document.getElementById('btn-save-prod').textContent = 'Actualizar Producto';
+      document.getElementById('btn-cancel-edit').style.display = 'block';
+    }
+
+    function resetProdForm() {
+      document.getElementById('form-product').reset();
+      document.getElementById('prod-id').value = '';
+      document.getElementById('form-title').textContent = 'Agregar Producto';
+      document.getElementById('btn-save-prod').textContent = 'Guardar Producto';
+      document.getElementById('btn-cancel-edit').style.display = 'none';
+      document.getElementById('prod-margin').value = "30";
+    }
+
+    function renderInventory() {
+      const inventory = getProductsSQL();
+      const searchElem = document.getElementById('search-inv-prod');
+      const query = searchElem ? searchElem.value.toLowerCase().trim() : '';
+
+      const filtered = inventory.filter(p => 
+        p.code.toLowerCase().includes(query) || 
+        p.name.toLowerCase().includes(query)
+      );
+
+      const listElem = document.getElementById('inventory-list');
+      if (filtered.length === 0) {
+        listElem.innerHTML = `<tr><td colspan="8" style="text-align:center; color: var(--text-muted);">No se encontraron productos.</td></tr>`;
+        return;
+      }
+
+      const isCajero = currentUser && currentUser.role === 'cajero';
+
+      listElem.innerHTML = filtered.map(p => {
+        const priceBs = (p.price * exchangeRate).toFixed(2);
+        return `
+          <tr>
+            <td><b>${p.code}</b></td>
+            <td>${p.name}</td>
+            <td><small>${p.supplier || 'N/A'}</small></td>
+            <td>$${(p.cost || 0).toFixed(2)}</td>
+            <td>${p.margin || 0}%</td>
+            <td><b>$${p.price.toFixed(2)}</b><span class="price-ves">Bs. ${priceBs}</span></td>
+            <td><b style="color: ${p.stock < 3 ? 'red' : 'inherit'}">${p.stock}</b></td>
+            <td>
+              <div class="action-btns">
+                <button class="btn-warning" onclick="editProd('${p.id}')">Editar</button>
+                <button class="btn-danger" onclick="deleteProd('${p.id}')" ${isCajero ? 'disabled' : ''}>Borrar</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function deleteProd(id) {
+      if (currentUser && currentUser.role === 'cajero') {
+        alert('Acceso denegado: El usuario cajero no tiene permiso para borrar productos.');
+        return;
+      }
+
+      if(confirm('¿Eliminar este producto de la Base de Datos SQL?')) {
+        db.run("DELETE FROM productos WHERE id = ?", [id]);
+        saveDBToLocalStorage();
+        loadAllData();
+      }
+    }
+
+    // --- CLIENTES Y PROVEEDORES SQL ---
+    document.getElementById('form-client').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = Date.now().toString();
+      const doc = document.getElementById('cli-doc').value;
+      const name = document.getElementById('cli-name').value;
+      const phone = document.getElementById('cli-phone').value;
+
+      db.run("INSERT INTO clientes VALUES (?, ?, ?, ?)", [id, doc, name, phone]);
+      saveDBToLocalStorage();
+      loadAllData();
+      document.getElementById('form-client').reset();
+    });
+
+    function renderClients() {
+      const clients = getClientsSQL();
+      document.getElementById('clients-list').innerHTML = clients.map(c => `
+        <tr><td>${c.doc}</td><td>${c.name}</td><td>${c.phone}</td></tr>
+      `).join('');
+    }
+
+    document.getElementById('form-supplier').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = Date.now().toString();
+      const doc = document.getElementById('sup-doc').value;
+      const name = document.getElementById('sup-name').value;
+      const phone = document.getElementById('sup-phone').value;
+
+      db.run("INSERT INTO proveedores VALUES (?, ?, ?, ?)", [id, doc, name, phone]);
+      saveDBToLocalStorage();
+      loadAllData();
+      document.getElementById('form-supplier').reset();
+    });
+
+    function renderSuppliers() {
+      const suppliers = getSuppliersSQL();
+      document.getElementById('suppliers-list').innerHTML = suppliers.map(s => `
+        <tr><td>${s.doc}</td><td>${s.name}</td><td>${s.phone}</td></tr>
+      `).join('');
+    }
+
+    // --- HISTORIAL Y CIERRE SQL ---
+    function renderSalesHistory() {
+      const sales = getSalesSQL();
+      document.getElementById('history-list').innerHTML = sales.map(s => `
+        <tr>
+          <td><b>${s.id}</b></td>
+          <td>${s.date}</td>
+          <td>${s.client}</td>
+          <td>
+            <span class="badge" style="background:#e0e7ff; color:#3730a3;">${s.paymentMethod}</span>
+            ${s.paymentRef !== 'N/A' ? `<br><small style="color:var(--text-muted)">Ref: ${s.paymentRef}</small>` : ''}
+          </td>
+          <td><b>$${s.totalUsd.toFixed(2)}</b></td>
+          <td class="price-ves">Bs. ${s.totalVes.toFixed(2)}</td>
+          <td>Bs. ${s.rateUsed.toFixed(2)}</td>
+          <td><span class="badge">${s.seller}</span></td>
+          <td>
+            <button class="btn-rate" onclick="printReceipt('${s.id}')" style="padding: 4px 8px; font-size: 0.8rem;">🖨️ Imprimir</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderCierre() {
+      const sales = getSalesSQL();
+      document.getElementById('summary-count').textContent = sales.length;
+      const totalUsd = sales.reduce((sum, s) => sum + s.totalUsd, 0);
+      const totalVes = sales.reduce((sum, s) => sum + s.totalVes, 0);
+
+      document.getElementById('summary-total-usd').textContent = totalUsd.toFixed(2);
+      document.getElementById('summary-total-ves').textContent = totalVes.toFixed(2);
+    }
+
+    /// Cargar SQLite al abrir la app
+  window.addEventListener('DOMContentLoaded', initSqlDB);
+
+  async function initSqlDB() {
+  try {
+    SQL_ENGINE = await initSqlJs({
+      locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+    });
+
+    const savedDb = localStorage.getItem('app_sqlite_db_v3');
+    if (savedDb) {
+      const u8 = new Uint8Array(JSON.parse(savedDb));
+      db = new SQL_ENGINE.Database(u8);
+      console.log("Base de datos cargada desde LocalStorage.");
+    } else {
+      // Agregamos un parámetro de tiempo para ignorar la caché del navegador/WebViewer
+      const dbUrl = 'https://rafaelvz12.github.io/pos_motorepuestos/database.sqlite?v=' + Date.now();
+      console.log("Descargando base de datos desde:", dbUrl);
+
+      const response = await fetch(dbUrl, { cache: "no-store" });
+      if (response.ok) {
+        const buf = await response.arrayBuffer();
+        db = new SQL_ENGINE.Database(new Uint8Array(buf));
+        saveDBToLocalStorage();
+        console.log("Base de datos descargada e instalada con éxito.");
+      } else {
+        console.warn("No se pudo descargar el archivo database.sqlite.");
+        db = new SQL_ENGINE.Database();
+        createTablesSQL();
+      }
+    }
+
+    loadExchangeRateFromSQL();
+    loadAllData();
+  } catch (err) {
+    console.error("Error al inicializar SQLite:", err);
+  }
+}
+
+function saveDBToLocalStorage() {
+  if (!db) return;
+  const data = db.export();
+  const arr = Array.from(data);
+  localStorage.setItem('app_sqlite_db_v3', JSON.stringify(arr));
+}
+  </script>
+</body>
+</html>
